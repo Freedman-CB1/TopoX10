@@ -70,6 +70,10 @@ class cbToolBox(QtGui.QDockWidget):
 
     def restore_dialog(self):
         self.style_string= FreeCAD.ParamGet("User parameter:BaseApp/Preferences/MainWindow").GetString("StyleSheet")
+        if self.show_report.isChecked():
+            self.report_stat = True
+        else: self.report_stat = False
+
         if self.style_string ==  "":
             self.build_first()
             self.wid.setLayout(self.lay)
@@ -103,9 +107,10 @@ class cbToolBox(QtGui.QDockWidget):
             self.set_redo.setStyleSheet(color) 
             color="background-color:thistle;"  
             self.update_placement.setStyleSheet(color)
-            self.button_close.setStyleSheet(color)  
-
-
+            self.button_close.setStyleSheet(color) 
+        if self.report_stat == True:
+            self.show_report.setChecked(True)     
+    
    
 
     def on_vis_dev(self):
