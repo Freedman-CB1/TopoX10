@@ -8,7 +8,7 @@
 # GNU Lesser General Public License for more details.
  # --------------------
 __Title__="TopoX10"
-__Author__ = "freedman"
+__Author__ = "Chris Berg"
 __Version__ = "10"
 __Date__    = "3/08/2022"
 __Requires__ = "Built on 20.275"  
