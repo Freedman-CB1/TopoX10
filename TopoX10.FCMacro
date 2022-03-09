@@ -1,0 +1,514 @@
+ # This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as 
+# published by the Free Software Foundation, either version 3 of the 
+# License, or (at your option) any later version.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+ # --------------------
+__Title__="TopoX9"
+__Author__ = "freedman"
+__Version__ = "1.0"
+__Date__    = "3/02/2022"
+__Requires__ = "Built on 20.275"  
+__Communication__ = "User:freedman" 
+
+from PySide import QtGui,QtCore
+import FreeCAD as App
+import FreeCADGui as gui
+
+
+############  Widget width .... 140 for Alt style sheet..... Use 110 for Classic style sheet #############
+widget_width = 60
+##########################################################################
+edge_tolerance = .00001
+############################################################################
+
+if Gui.getMainWindow().findChild(QtGui.QWidget, "TopoX10"):    # all ready running test
+    print("The Macro is already running.....")
+    exit()
+
+class cbToolBox(QtGui.QDockWidget):
+    def __init__(self, parent = Gui.getMainWindow()):
+        global widget_width
+        myw=Gui.getMainWindow()   
+        self.r=myw.findChild(QtGui.QTextEdit, "Report view")
+
+        super(cbToolBox, self).__init__(parent, QtCore.Qt.Tool)
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+        self.setAutoFillBackground(True)
+        self.setObjectName("TopoX10")
+        self.setWindowTitle("TopoX10")
+          
+        self.build_first()    # this calls all the buttons
+        self.wid.setLayout(self.lay)
+        self.setWidget(self.wid)
+        for chi in self.wid.children():
+            self.lay.setAlignment(chi, QtCore.Qt.AlignCenter)    #QtCore.Qt.RightDockWidgetArea,??
+        self.move(Gui.getMainWindow().frameGeometry().center().x()+400, Gui.getMainWindow().frameGeometry().top()+171)
+        self.restore_dialog()
+#               
+        doc = FreeCAD.ActiveDocument                      # no open document test
+        if doc == None:
+            doc = FreeCAD.newDocument()
+
+        mw=Gui.getMainWindow()
+        mw.workbenchActivated.connect(self.wbChange)
+
+        self.delay_timer = QtCore.QTimer()
+        self.delay_timer.timeout.connect(self.on_delay_timer)
+
+        self.tolerance = edge_tolerance
+
+        self.in_sketcher = False
+        self.sketch_on = False
+        self.sortedActiveObjects = []
+
+        FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Sketcher/General").SetBool("AutoRecompute",False)
+       
+
+    def restore_dialog(self):
+        self.style_string= FreeCAD.ParamGet("User parameter:BaseApp/Preferences/MainWindow").GetString("StyleSheet")
+        if self.style_string ==  "":
+            self.build_first()
+            self.wid.setLayout(self.lay)
+            self.setWidget(self.wid)
+            self.resize(95,320)
+            self.color="background-color:tan;"   
+            self.setStyleSheet(self.color)   
+            self.setAutoFillBackground(True)
+            color="background-color:gainsboro;"
+            self.set_delete.setStyleSheet(color)
+            self.set_undo.setStyleSheet(color)
+            self.set_redo.setStyleSheet(color) 
+            color="background-color:thistle;"  
+            self.update_placement.setStyleSheet(color)
+            self.button_close.setStyleSheet(color) 
+            color="background-color:gainsboro;" 
+            self.sketch_vis.setStyleSheet(color)
+            self.run_refacing.setStyleSheet(color)
+       
+        else:                  #    "stylesheet being used
+            self.build_first()
+            self.wid.setLayout(self.lay)
+            self.setWidget(self.wid)
+            self.resize(widget_width,485)
+            self.color="background-color:wheat;"   
+            self.setStyleSheet(self.color)   
+            self.setAutoFillBackground(True)
+            color="background-color:gainsboro;"
+            self.set_delete.setStyleSheet(color)
+            self.set_undo.setStyleSheet(color)
+            self.set_redo.setStyleSheet(color) 
+            color="background-color:thistle;"  
+            self.update_placement.setStyleSheet(color)
+            self.button_close.setStyleSheet(color)  
+
+
+   
+
+    def on_vis_dev(self):
+        self.vis_dev.setChecked(False)        
+        doc = FreeCAD.ActiveDocument
+        if doc != None:
+            for obj in doc.Objects:
+                if obj.TypeId[:4] == 'Part' or obj.TypeId == "Sketcher::SketchObject":
+                    if hasattr(obj.ViewObject,'Deviation'):  # should be a sketch
+                        obj.ViewObject.Deviation = 0.05 ;        
+                        obj.ViewObject.AngularDeflection = 10.0
+            App.ActiveDocument.recompute() 
+
+    def on_close_sketch(self):
+        Gui.ActiveDocument.resetEdit()
+        App.ActiveDocument.commitTransaction()
+
+    def reset_placement(self):
+        self.bod_list = self.sortedCurrentBodyList()        
+        for obj in self.bod_list:
+            if obj.TypeId == "Sketcher::SketchObject":
+                obj.Placement = obj.Conx_placement
+                obj.AttachmentOffset = obj.Conx_attachment_offset
+
+    def restore_placement(self):
+        self.bod_list = self.sortedCurrentBodyList()
+        for obj in self.bod_list:
+            if obj.TypeId == "Sketcher::SketchObject":
+                obj.Conx_placement = obj.Placement 
+                obj.Conx_attachment_offset =  obj.AttachmentOffset 
+
+    def on_set_undo(self):  ### Rename
+        Gui.runCommand('Std_Undo',0)
+        self.reset_placement()
+       
+
+    def on_set_redo(self):  ### Rename
+        self.set_status.setText("       -------\n    Ready \n       ------ ")
+        if not self.sortedCurrentBodyList():
+            Gui.runCommand('Std_Redo',0)
+            self.restore_placement()
+
+    def clearLayout(self,layout):
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+              child.widget().deleteLater()
+
+
+    def on_sketch_vis(self):
+        self.set_status.setText("          -------\n         Ready \n          ------ ")
+        if self.sketch_on ==True:
+            self.sketch_on = False
+        else:    
+            self.sketch_on = True
+        if self.sortedCurrentBodyList() != None:
+            self.bod_list = self.sortedCurrentBodyList()
+            for obj in self.bod_list:
+                if obj.TypeId == "Sketcher::SketchObject":
+                    obj.ViewObject.Visibility = self.sketch_on
+
+    
+    def on_new_property(self):  ### Rename
+        self.set_status.setText("        -------\n    Ready \n       ------ ")
+        if self.sortedCurrentBodyList() != None:
+            doc = FreeCAD.ActiveDocument
+            if doc != None:
+                self.bod_list = self.sortedCurrentBodyList()
+                for obj in self.bod_list:
+                    if obj.TypeId == "Sketcher::SketchObject":
+                        if not hasattr(obj,"Conx_placement"):
+                            obj.addProperty("App::PropertyPlacement","Conx_placement")
+                        if not hasattr(obj,"Conx_attachment_offset"):
+                            obj.addProperty("App::PropertyPlacement","Conx_attachment_offset")   
+    
+                        if obj.Support:
+                            obj.Conx_placement = obj.Placement 
+                            obj.Conx_attachment_offset = obj.AttachmentOffset                       
+  
+                 
+
+    def on_color_to_refacing(self):
+        doc = FreeCAD.ActiveDocument
+        if doc != None:
+            self.restore_dialog()
+            self.set_status.setText("       -------\n    Ready \n------------- ")
+            self.sortedCurrentBodyList()    # this will update the body list
+            if not self.sortedCurrentBodyList():
+                return
+    
+            
+            for obj in self.sortedCurrentBodyList():
+                if obj.TypeId == "Sketcher::SketchObject":
+                    if not hasattr(obj,"Conx_placement"):
+                        self.set_status.setText("       --------\n No placements! \n      ------- ")
+                        color="background-color:cyan;" 
+                        self.set_status.setStyleSheet(color)
+                        return
+    
+            self.run_refacing.setText("------------\n " )   
+            color="background-color:lime;"
+            font="font-weight:bold;"
+            self.set_status.setStyleSheet(color)
+            self.set_status.setText("        --------\n          Wait! \n         ------- ")   
+            self.run_refacing.setStyleSheet(color)
+            FreeCADGui.updateGui()   
+            self.delay_timer.start(800)  # this delay allow the button to change color prior to the update
+
+    def on_delay_timer(self):
+        self.delay_timer.stop()
+        self.on_refacing() 
+
+###################
+    def on_refacing(self):
+        if self.show_report.isChecked():
+            self.r.clear()
+            print("OK!")
+        App.activeDocument().recompute(None,True,True)
+        self.pass_number =0
+        if FreeCAD.ActiveDocument.isTouched() == True or  self.check_4_quick_update() != 0:
+            if self.show_report.isChecked():
+                print("Wait  !!")
+                FreeCADGui.updateGui()   
+            self.anti_topo_model()
+            App.activeDocument().recompute(None,True,True)      
+            if FreeCAD.ActiveDocument.isTouched() == False and self.check_4_quick_update() == 0:
+                self.pass_number = 2 
+            else:
+                self.pass_number= 1
+                self.list_sketches()
+        else:
+            self.pass_number = 2 
+
+        if self.pass_number ==1:
+            color="background-color:yellow;" 
+            self.set_status.setStyleSheet(color)
+            self.set_status.setText("       Broken ")
+            self.color="background-color:yellow;"   
+            self.setStyleSheet(self.color)   
+            self.setAutoFillBackground(True)
+            App.activeDocument().recompute(None,True,True)   
+
+                 
+        if self.pass_number == 2:
+            self.set_status.setText("      -----------\n        Ready \n    --------- ")
+            self.update_placement.setEnabled(True) 
+            color="background-color:Lightblue;" 
+            self.set_status.setStyleSheet(color)
+            self.set_status.setText("      ------------ \n      Model OK!  \n      ------------")
+            self.color="background-color:tan;"
+            self.setStyleSheet(self.color)  
+        self.setAutoFillBackground(True) 
+        self.run_refacing.setText("Update \nModel")   
+        color="background-color:beige;"
+        font="font-weight:bold;"
+        self.run_refacing.setStyleSheet(color)
+        App.activeDocument().recompute(None,True,True)      
+        FreeCADGui.updateGui()   
+       
+
+    def list_sketches(self):
+        self.bod_list = self.sortedCurrentBodyList()  ### get the list of Active body objects
+        self.line05=QtGui.QLabel("~ Bad placement ~", self)
+        self.lay.addWidget(self.line05)
+        for obj in self.bod_list:
+            if obj.TypeId == "Sketcher::SketchObject":      # this would be the target sketch
+                if obj.Placement.Base.isEqual(obj.Conx_placement.Base, self.tolerance)  and obj.Placement.Rotation.isSame(obj.Conx_placement.Rotation, self.tolerance):
+                    continue
+                else:  
+                    self.to_dialog(obj.Name, 0)
+                 
+
+    def to_dialog(self,sketch,num):
+        self.i = QtGui.QCheckBox(sketch,self)
+        self.lay.addWidget(self.i)
+        if num == 0:
+            self.i.setChecked(True)     
+
+
+    def check_4_quick_update(self):
+        self.error_count = 0
+        self.bod_list = self.sortedCurrentBodyList()  ### get the list of Active body objects
+        for obj in self.bod_list:
+            if obj.TypeId == "Sketcher::SketchObject":      # this would be the target sketch
+                if obj.Placement.Base.isEqual(obj.Conx_placement.Base, self.tolerance)  and obj.Placement.Rotation.isSame(obj.Conx_placement.Rotation, self.tolerance):
+                    continue
+                else:  
+                    self.error_count += 1
+        return self.error_count 
+
+                  
+
+######################################################################### 
+    def anti_topo_model(self):
+        self.bod_list = self.sortedCurrentBodyList()  ### get the list of Active body objects
+
+        self.body_obj = Gui.ActiveDocument.ActiveView.getActiveObject('pdbody')
+        self.tip_name  = self.body_obj.Tip
+        if self.tip_name == None:
+            return
+     
+        for obj in self.bod_list:
+            if obj.TypeId == "Sketcher::SketchObject"  and hasattr(obj,'AttachmentOffset'):      # this would be the target sketch
+             
+                self.support_copy = obj.Support
+                if not obj.AttachmentOffset.Base.isEqual(obj.Conx_attachment_offset.Base, self.tolerance):
+                    obj.Conx_placement = obj.Placement
+                    if self.show_report.isChecked():
+                        print("AttachmentOffset change update")
+                    
+                if obj.Support:
+                    self.my_support = obj.Support[0][0]  # find the pad name
+                    self.face_portion = obj.Support[0][1]  # find the face name
+                    if self.my_support.isDerivedFrom('App::Plane'):    # if the support is a origin plane, then exit
+                        continue 
+                else: continue            
+
+                for ob1 in self.bod_list:
+                    if hasattr(ob1,'Profile'):
+                        if ob1.Name == self.my_support.Name: 
+                            self.supp_obj = ob1 
+
+                self.found_face = False                
+                doc = FreeCAD.ActiveDocument
+                FreeCAD.getDocument(doc.Name).getObject(self.body_obj.Name).Tip =    FreeCAD.getDocument(doc.Name).getObject( self.supp_obj.Name) 
+                for i, fac in enumerate(self.supp_obj.Shape.Faces):    # Going through all faces of the object
+                    if fac.Surface.isPlanar():
+                        facName = 'Face{:d}'.format(i+1)      # Building face name from its index
+                        obj.Support  = [(FreeCAD.getDocument(FreeCAD.ActiveDocument.Name).getObject(self.my_support.Name),facName) ]   # make sketch002 support = face
+                        if obj.Placement.Base.isEqual(obj.Conx_placement.Base, edge_tolerance)  and obj.Placement.Rotation.isSame(obj.Conx_placement.Rotation, edge_tolerance):
+                            self.found_face = True
+                            App.activeDocument().recompute(None,True,True)       
+                            if self.show_report.isChecked():
+                                print("Found! Searching faces of = " + self.supp_obj.Name +"...  Attaching = " + obj.Name +" -> " +  facName )
+                            break
+                
+                if self.found_face == False:    # did not find a face so set it to the last know copied sketch placement
+                    obj.Placement = obj.Conx_placement
+                    obj.Support = self.support_copy 
+                    if self.show_report.isChecked():
+                        print(obj.Name + ">>>>~~~~~~ Can't find face ~~~~~~<<<<<<<<<<<")
+                    return 1
+        doc = FreeCAD.ActiveDocument
+        FreeCAD.getDocument(doc.Name).getObject(self.body_obj.Name).Tip =    FreeCAD.getDocument(doc.Name).getObject( self.tip_name.Name) 
+                                                                    
+                         
+##--------------------------------------------------------------------------
+    def wbChange(self,name):
+        mw=Gui.getMainWindow()
+        active = Gui.activeWorkbench().__class__.__name__
+        if active == "SketcherWorkbench":
+            self.in_sketcher = True
+            self.on_new_property()
+     
+        if active != "SketcherWorkbench":
+            self.in_sketcher = False
+            self.on_color_to_refacing()
+            self.color="background-color:lightgray;"   
+            self.setStyleSheet(self.color)   
+            self.setAutoFillBackground(True) 
+            FreeCADGui.updateGui()  
+       
+
+    def on_update_placements(self):
+        self.on_new_property()
+        self.set_status.setText("     ---------\n    Ready \n     ------- ")
+        self.body_obj = Gui.ActiveDocument.ActiveView.getActiveObject('pdbody')
+        doc = FreeCAD.ActiveDocument
+        if self.sortedCurrentBodyList() != None:
+            self.bod_list = self.sortedCurrentBodyList()
+            for obj in self.bod_list:
+                if obj.TypeId == "Sketcher::SketchObject":
+                    if self.show_report.isChecked():
+                        print("Processing ", obj.Name)       
+                    if obj.Support:
+                        obj.Conx_placement = obj.Placement
+                        obj.Conx_attachment_offset = obj.AttachmentOffset 
+                    else:
+                        print(obj.Name,"Object has no Support ")
+                if hasattr(obj,'Profile'):
+                    self.feature_last = obj.Name
+            FreeCAD.getDocument(doc.Name).getObject(self.body_obj.Name).Tip =    FreeCAD.getDocument(doc.Name).getObject(self.feature_last) 
+
+    def on_delete(self):
+        doc = FreeCAD.ActiveDocument
+        if doc != None:
+            self.set_status.setText("     ---------\n    Ready \n     -------- ")
+            if self.sortedCurrentBodyList() != None:
+                self.bod_list = self.sortedCurrentBodyList()
+                for obj in self.bod_list:
+                    if obj.TypeId == "Sketcher::SketchObject":   # found Sketcher obj
+                        if hasattr(obj,'Conx_placement'):
+                            obj.removeProperty("Conx_placement")
+                        if hasattr(obj,'Conx_face'):
+                            obj.removeProperty("Conx_face")  
+                        if hasattr(obj,"Conx_attachment_offset"):
+                            obj.removeProperty("Conx_attachment_offset")  
+
+    def objInActiveBody(self):
+        self.activeBody = Gui.ActiveDocument.ActiveView.getActiveObject('pdbody')
+        if self.activeBody is None:
+            return []
+        else:
+            return self.activeBody.OutListRecursive
+
+    def sortedCurrentBodyList(self):
+        self.sortedActiveObjects.clear()
+        if  self.objInActiveBody():
+            documentObjects = App.ActiveDocument.Objects  #list in tree list order?
+            activeObjects = self.objInActiveBody()
+            self.sortedActiveObjects = [obj for obj in documentObjects if obj in activeObjects]
+            return self.sortedActiveObjects 
+        else: 
+            self.set_status.setText("       -------\n     Select a Body \n       ------ ")
+            color="background-color:cyan;" 
+            self.set_status.setStyleSheet(color)
+            return None   
+## ----------------------------------------------------------------------------------
+    def on_close(self):
+        print("Bye")
+        self.close()
+
+    def on_vis_100(self): 
+        self.vis_100.setChecked(False)
+        self.set_transparency_all(0)	
+   
+    def on_vis_25(self): 
+        self.vis_25.setChecked(False)
+        self.set_transparency_all(75)	#  self.set_opt_button_color(3,opt_vis,1) 
+       
+    def set_transparency_all(self,data):
+        self.set_status.setText("         -------\n         Ready \n         ------- ")
+        if self.sortedCurrentBodyList() != None:
+            color="background-color:lightblue;" 
+            self.set_status.setStyleSheet(color)
+            self.active_bod = Gui.ActiveDocument.ActiveView.getActiveObject('pdbody')
+            self.active_bod.ViewObject.Transparency=data
+
+    def build_first(self):
+
+        self.wid = QtGui.QWidget()
+        self.lay = QtGui.QVBoxLayout()             
+        self.lay.setContentsMargins(2,2,2,2) 
+
+        self.button_close= QtGui.QPushButton("Exit",self)
+        self.button_close.clicked.connect(self.on_close)       
+        self.lay.addWidget(self.button_close)
+        color="foreground-color:cornsilk;"
+        self.button_close.setStyleSheet(color) 
+      
+        self.set_delete = QtGui.QPushButton("Delete\n Properties",self)
+        self.set_delete.clicked.connect(self.on_delete)       
+        self.lay.addWidget(self.set_delete)
+        self.set_delete.setStyleSheet(color)     
+
+        self.sketch_vis= QtGui.QPushButton("Sketches \nOn/Off",self)
+        self.sketch_vis.clicked.connect(self.on_sketch_vis)       
+        self.lay.addWidget(self.sketch_vis)
+        self.sketch_vis.setStyleSheet(color)
+    
+
+        self.vis_100 = QtGui.QCheckBox("Visibility 100" ,self)
+        self.vis_100.clicked.connect(self.on_vis_100)  
+        self.lay.addWidget(self.vis_100)
+
+        self.vis_25 = QtGui.QCheckBox("Visibility 25  " ,self)
+        self.vis_25.clicked.connect(self.on_vis_25)  
+        self.lay.addWidget(self.vis_25)
+
+        self.vis_dev = QtGui.QCheckBox("High Res Edge" ,self)
+        self.vis_dev.clicked.connect(self.on_vis_dev)  
+        self.lay.addWidget(self.vis_dev)
+
+        self.show_report = QtGui.QCheckBox("To Report " ,self)
+        self.lay.addWidget(self.show_report)
+
+        self.set_undo = QtGui.QPushButton("   Undo   ",self)
+        self.set_undo.clicked.connect(self.on_set_undo)       
+        self.lay.addWidget(self.set_undo)
+        self.set_undo.setStyleSheet(color)
+
+        self.set_redo = QtGui.QPushButton("   Redo   ",self)
+        self.set_redo.clicked.connect(self.on_set_redo)       
+        self.lay.addWidget(self.set_redo)
+        self.set_redo.setStyleSheet(color)
+
+        self.update_placement = QtGui.QPushButton(" Update \n Placements",self)
+        self.update_placement.clicked.connect(self.on_update_placements)       
+        self.lay.addWidget(self.update_placement)
+        self.update_placement.setStyleSheet(color)
+         
+        self.set_status= QtGui.QLabel("       ---------- \n        Status  \n       ----------",self)
+        self.lay.addWidget(self.set_status)
+
+        self.run_refacing = QtGui.QPushButton("Update \nModel",self)
+        self.run_refacing.clicked.connect(self.on_color_to_refacing)       
+        self.lay.addWidget(self.run_refacing)
+   #     color="background-color:cornsilk;"
+        self.run_refacing.setStyleSheet(color)
+
+
+visCB = cbToolBox() 
+visCB.show()
+
+                               
+
