@@ -14,6 +14,7 @@ __Version__ = "10"
 __Date__    = "03/08/2022"
 __Requires__ = "Built on 20.275"
 __Communication__ = "User:freedman"
+__icon__ = no_TNP.svg
 
 from PySide import QtGui,QtCore
 import FreeCAD as App
