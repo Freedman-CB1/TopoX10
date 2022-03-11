@@ -51,7 +51,7 @@ class cbToolBox(QtGui.QDockWidget):
         self.restore_dialog()
 #               
         doc = FreeCAD.ActiveDocument                      # no open document test
-        if doc == None:
+        if doc is None:
             doc = FreeCAD.newDocument()
 
         mw=Gui.getMainWindow()
@@ -117,7 +117,7 @@ class cbToolBox(QtGui.QDockWidget):
     def on_vis_dev(self):
         self.vis_dev.setChecked(False)        
         doc = FreeCAD.ActiveDocument
-        if doc != None:
+        if doc is not None:
             for obj in doc.Objects:
                 if obj.TypeId[:4] == 'Part' or obj.TypeId == "Sketcher::SketchObject":
                     if hasattr(obj.ViewObject,'Deviation'):  # should be a sketch
@@ -167,7 +167,7 @@ class cbToolBox(QtGui.QDockWidget):
             self.sketch_on = False
         else:    
             self.sketch_on = True
-        if self.sortedCurrentBodyList() != None:
+        if self.sortedCurrentBodyList() is not None:
             self.bod_list = self.sortedCurrentBodyList()
             for obj in self.bod_list:
                 if obj.TypeId == "Sketcher::SketchObject":
@@ -176,9 +176,9 @@ class cbToolBox(QtGui.QDockWidget):
     
     def on_new_property(self):  ### Rename
         self.set_status.setText("        -------\n    Ready \n       ------ ")
-        if self.sortedCurrentBodyList() != None:
+        if self.sortedCurrentBodyList() is not None:
             doc = FreeCAD.ActiveDocument
-            if doc != None:
+            if doc is not None:
                 self.bod_list = self.sortedCurrentBodyList()
                 for obj in self.bod_list:
                     if obj.TypeId == "Sketcher::SketchObject":
@@ -195,7 +195,7 @@ class cbToolBox(QtGui.QDockWidget):
 
     def on_color_to_refacing(self):
         doc = FreeCAD.ActiveDocument
-        if doc != None:
+        if doc is not None:
             self.restore_dialog()
             self.set_status.setText("       -------\n    Ready \n------------- ")
             self.sortedCurrentBodyList()    # this will update the body list
@@ -310,7 +310,7 @@ class cbToolBox(QtGui.QDockWidget):
 
         self.body_obj = Gui.ActiveDocument.ActiveView.getActiveObject('pdbody')
         self.tip_name  = self.body_obj.Tip
-        if self.tip_name == None:
+        if self.tip_name is None:
             return
      
         for obj in self.bod_list:
@@ -380,7 +380,7 @@ class cbToolBox(QtGui.QDockWidget):
         self.set_status.setText("     ---------\n    Ready \n     ------- ")
         self.body_obj = Gui.ActiveDocument.ActiveView.getActiveObject('pdbody')
         doc = FreeCAD.ActiveDocument
-        if self.sortedCurrentBodyList() != None:
+        if self.sortedCurrentBodyList() is not None:
             self.bod_list = self.sortedCurrentBodyList()
             for obj in self.bod_list:
                 if obj.TypeId == "Sketcher::SketchObject":
@@ -397,9 +397,9 @@ class cbToolBox(QtGui.QDockWidget):
 
     def on_delete(self):
         doc = FreeCAD.ActiveDocument
-        if doc != None:
+        if doc is not None:
             self.set_status.setText("     ---------\n    Ready \n     -------- ")
-            if self.sortedCurrentBodyList() != None:
+            if self.sortedCurrentBodyList() is not None:
                 self.bod_list = self.sortedCurrentBodyList()
                 for obj in self.bod_list:
                     if obj.TypeId == "Sketcher::SketchObject":   # found Sketcher obj
@@ -444,7 +444,7 @@ class cbToolBox(QtGui.QDockWidget):
        
     def set_transparency_all(self,data):
         self.set_status.setText("         -------\n         Ready \n         ------- ")
-        if self.sortedCurrentBodyList() != None:
+        if self.sortedCurrentBodyList() is not None:
             color="background-color:lightblue;" 
             self.set_status.setStyleSheet(color)
             self.active_bod = Gui.ActiveDocument.ActiveView.getActiveObject('pdbody')
